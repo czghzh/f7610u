@@ -1,0 +1,7 @@
+# PON diagnostics settings backing luci-app-pon's 诊断 tab.
+#
+# The helper on this target (/usr/libexec/airoha-pon-debug) has no packet
+# capture: there is no OMCI/OAM daemon to capture from.  The flag is kept so the
+# page renders, and is documented as inactive.
+config capture 'capture'
+	option enabled '0'

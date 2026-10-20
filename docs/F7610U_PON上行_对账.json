@@ -1,0 +1,484 @@
+{
+  "_派生": "由 对账清单.py snapshot 生成，勿手改",
+  "生成时间": "2026-10-20T06:46:48",
+  "根目录": "/home/wen/WorkBuddy/zx/f7610u",
+  "含哈希": false,
+  "条目": [
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/9131-symbols.txt",
+      "exists": true,
+      "size": 79686,
+      "mtime": "2026-10-14T06:43:13",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/F7610U_PON上行_任务交接.md",
+      "exists": true,
+      "size": 4024,
+      "mtime": "2026-10-20T06:46:32",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/F7610U_PON上行_检查点.md",
+      "exists": true,
+      "size": 4645,
+      "mtime": "2026-10-20T05:54:56",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/F7610U_ZX279131驱动移植_任务交接.md",
+      "exists": true,
+      "size": 3957,
+      "mtime": "2026-10-19T02:39:05",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/F7610U_ZX279131驱动移植_检查点.md",
+      "exists": true,
+      "size": 5401,
+      "mtime": "2026-10-19T03:11:01",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/F7610U_踩坑卡.md",
+      "exists": true,
+      "size": 13054,
+      "mtime": "2026-10-19T02:18:18",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/NET-TEST-GUIDE.md",
+      "exists": true,
+      "size": 2946,
+      "mtime": "2026-10-14T15:13:05",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/NETWORK-DESIGN.md",
+      "exists": true,
+      "size": 15473,
+      "mtime": "2026-10-17T03:14:53",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/PON-PLAN.md",
+      "exists": true,
+      "size": 155772,
+      "mtime": "2026-10-20T05:46:15",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/PORT-NOTES.md",
+      "exists": true,
+      "size": 297316,
+      "mtime": "2026-10-17T10:31:58",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/README.md",
+      "exists": true,
+      "size": 1647,
+      "mtime": "2026-10-20T02:07:41",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/arp_feed.log",
+      "exists": true,
+      "size": 64843,
+      "mtime": "2026-10-15T04:48:16",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/arp_feed.py",
+      "exists": true,
+      "size": 1311,
+      "mtime": "2026-10-14T02:33:26",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/build.log",
+      "exists": true,
+      "size": 6327,
+      "mtime": "2026-10-14T00:10:59",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/build2.log",
+      "exists": true,
+      "size": 4855,
+      "mtime": "2026-10-14T00:15:57",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/build3.log",
+      "exists": true,
+      "size": 4855,
+      "mtime": "2026-10-14T00:22:05",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/build4.log",
+      "exists": true,
+      "size": 4854,
+      "mtime": "2026-10-14T03:01:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/build5.log",
+      "exists": true,
+      "size": 315794,
+      "mtime": "2026-10-15T03:39:00",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/cap2.sh",
+      "exists": true,
+      "size": 976,
+      "mtime": "2026-10-15T01:34:34",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/cap3.sh",
+      "exists": true,
+      "size": 795,
+      "mtime": "2026-10-15T01:35:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/cap_frames.sh",
+      "exists": true,
+      "size": 768,
+      "mtime": "2026-10-15T01:33:48",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/capture.log",
+      "exists": true,
+      "size": 1744,
+      "mtime": "2026-10-14T01:07:48",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/capture2.log",
+      "exists": true,
+      "size": 1729,
+      "mtime": "2026-10-14T01:10:41",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/capture3.log",
+      "exists": true,
+      "size": 225719,
+      "mtime": "2026-10-14T01:18:41",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/capture4.log",
+      "exists": true,
+      "size": 22739,
+      "mtime": "2026-10-14T05:30:25",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/diff_regs.py",
+      "exists": true,
+      "size": 2179,
+      "mtime": "2026-10-15T02:01:08",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/fakeprobe.S",
+      "exists": true,
+      "size": 1124,
+      "mtime": "2026-10-14T03:43:00",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/idmfdb-symbols.txt",
+      "exists": true,
+      "size": 15496,
+      "mtime": "2026-10-14T06:43:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/kallsyms-stock.txt",
+      "exists": true,
+      "size": 4655041,
+      "mtime": "2026-10-14T06:42:44",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/mini-tftpd.log",
+      "exists": true,
+      "size": 492,
+      "mtime": "2026-10-14T00:42:21",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/mini-tftpd.py",
+      "exists": true,
+      "size": 4105,
+      "mtime": "2026-10-14T03:54:01",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/mini-tftpd2.log",
+      "exists": true,
+      "size": 11552,
+      "mtime": "2026-10-14T03:53:36",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/mini-tftpd3.log",
+      "exists": true,
+      "size": 7309,
+      "mtime": "2026-10-14T06:30:45",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/netdriver-symbols.txt",
+      "exists": true,
+      "size": 10520,
+      "mtime": "2026-10-14T06:43:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-id-182536.txt",
+      "exists": true,
+      "size": 9896,
+      "mtime": "2026-10-14T18:26:31",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net-pull.txt",
+      "exists": true,
+      "size": 1174,
+      "mtime": "2026-10-14T06:47:24",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net1.txt",
+      "exists": true,
+      "size": 16042,
+      "mtime": "2026-10-14T06:41:33",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net3.txt",
+      "exists": true,
+      "size": 1871,
+      "mtime": "2026-10-14T06:44:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net4.txt",
+      "exists": true,
+      "size": 6787,
+      "mtime": "2026-10-14T06:44:58",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net5.txt",
+      "exists": true,
+      "size": 2815,
+      "mtime": "2026-10-14T06:45:44",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net6.txt",
+      "exists": true,
+      "size": 1779,
+      "mtime": "2026-10-14T06:49:14",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net7.txt",
+      "exists": true,
+      "size": 4964,
+      "mtime": "2026-10-14T06:50:40",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net8.txt",
+      "exists": true,
+      "size": 836,
+      "mtime": "2026-10-14T06:51:20",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net9-regs.txt",
+      "exists": true,
+      "size": 6745,
+      "mtime": "2026-10-14T06:52:50",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-net9b-regs.txt",
+      "exists": true,
+      "size": 12431,
+      "mtime": "2026-10-14T06:53:25",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-dma.txt",
+      "exists": true,
+      "size": 24545,
+      "mtime": "2026-10-14T18:38:21",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-dma2.txt",
+      "exists": true,
+      "size": 18253,
+      "mtime": "2026-10-14T18:45:52",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-dma3.txt",
+      "exists": true,
+      "size": 19357,
+      "mtime": "2026-10-14T19:10:37",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-dma4.txt",
+      "exists": true,
+      "size": 24928,
+      "mtime": "2026-10-14T19:38:29",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-dma6.txt",
+      "exists": true,
+      "size": 25608,
+      "mtime": "2026-10-14T20:01:56",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-dma7.txt",
+      "exists": true,
+      "size": 21425,
+      "mtime": "2026-10-14T20:15:25",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock-ppread.txt",
+      "exists": true,
+      "size": 3170,
+      "mtime": "2026-10-17T02:28:36",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock.txt",
+      "exists": true,
+      "size": 6533,
+      "mtime": "2026-10-14T05:42:48",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock2.txt",
+      "exists": true,
+      "size": 1667,
+      "mtime": "2026-10-14T05:43:32",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock3.txt",
+      "exists": true,
+      "size": 456,
+      "mtime": "2026-10-14T05:45:26",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock4.txt",
+      "exists": true,
+      "size": 1713,
+      "mtime": "2026-10-14T05:48:24",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock5.txt",
+      "exists": true,
+      "size": 1831,
+      "mtime": "2026-10-14T05:51:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock6.txt",
+      "exists": true,
+      "size": 26683,
+      "mtime": "2026-10-14T05:52:38",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/probe-stock7.txt",
+      "exists": true,
+      "size": 2151,
+      "mtime": "2026-10-14T05:53:25",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/stock_dump.sh",
+      "exists": true,
+      "size": 2500,
+      "mtime": "2026-10-15T02:17:32",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/stock_ref.txt",
+      "exists": true,
+      "size": 1109,
+      "mtime": "2026-10-15T02:01:00",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/switch-symbols.txt",
+      "exists": true,
+      "size": 76602,
+      "mtime": "2026-10-14T06:43:19",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/tm-symbols.txt",
+      "exists": true,
+      "size": 567388,
+      "mtime": "2026-10-14T06:43:13",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/tn.py",
+      "exists": true,
+      "size": 2835,
+      "mtime": "2026-10-15T02:27:24",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/tn_cmds.txt",
+      "exists": true,
+      "size": 205,
+      "mtime": "2026-10-15T02:36:39",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/tn_out.txt",
+      "exists": true,
+      "size": 2676,
+      "mtime": "2026-10-15T02:32:52",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/tn_p4.txt",
+      "exists": true,
+      "size": 405,
+      "mtime": "2026-10-15T02:36:27",
+      "sha256": null
+    },
+    {
+      "path": "/home/wen/WorkBuddy/zx/f7610u/watch_wire.sh",
+      "exists": true,
+      "size": 1109,
+      "mtime": "2026-10-15T01:29:18",
+      "sha256": null
+    }
+  ]
+}

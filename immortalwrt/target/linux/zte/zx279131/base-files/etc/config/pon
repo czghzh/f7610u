@@ -1,0 +1,11 @@
+config xpon line0
+	option device pon
+	option mode gpon
+
+config omci omci0
+	option line line0
+	option enable 1
+
+config oam oam0
+	option line line0
+	option enable 0

@@ -1,0 +1,135 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# airoha-pon-debug - diagnostic helper for luci-app-pon on the ZTE ZX279131 port.
+#
+# luci-app-pon expects this helper to exist on Airoha targets:
+#     airoha-pon-debug collect    -> write /tmp/pon-debug.tar.gz
+#     airoha-pon-debug restart    -> restart the PON line, print {"ok":bool}
+#
+# There is no Airoha PON driver here, but the *page* is generic.  So collect
+# gathers what this board actually has (ZX279131 NIC state, the BOSA EEPROM,
+# GPIO47/48, kernel log, UCI) instead of Airoha packet captures.
+#
+# restart cannot succeed: this target has no PON protocol stack, so the honest
+# answer is ok:false with a reason.  If a future PON daemon appears, add its
+# init script call here.
+
+set -u
+
+OUT=/tmp/pon-debug.tar.gz
+WORK=/tmp/pon-debug.d
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+collect() {
+	rm -rf "$WORK"
+	mkdir -p "$WORK"
+
+	# --- system -----------------------------------------------------
+	{
+		echo "== uname =="; uname -a
+		echo; echo "== cmdline =="; cat /proc/cmdline 2>/dev/null
+		echo; echo "== uptime =="; uptime 2>/dev/null
+		echo; echo "== release =="; cat /etc/openwrt_release 2>/dev/null
+	} > "$WORK/system.txt" 2>&1
+
+	# --- kernel log -------------------------------------------------
+	dmesg 2>/dev/null > "$WORK/dmesg.txt"
+
+	# --- PON / optical ----------------------------------------------
+	{
+		for d in $(uci -q show pon 2>/dev/null | sed -n "s/^pon\.\([^.=]*\)=xpon\$/\1/p"); do
+			dev=$(uci -q get "pon.$d.device")
+			echo "== ponctl --device ${dev:-pon} =="
+			/usr/sbin/ponctl --device "${dev:-pon}" status --json 2>&1
+			echo
+			echo "== pondctl --line $d =="
+			/usr/bin/pondctl status --line "$d" 2>&1
+			echo
+		done
+		echo "== uci show pon =="
+		uci -q show pon 2>&1
+	} > "$WORK/pon.txt" 2>&1
+
+	# --- BOSA EEPROM (SFF-8472) -------------------------------------
+	{
+		for p in 0-0050 0-0051; do
+			f=/sys/bus/i2c/devices/$p/eeprom
+			echo "== $p =="
+			if [ -r "$f" ]; then
+				# A2 only serves the DDM block when a transfer starts at 0x60.
+				case "$p" in
+				0-0051) hexdump -C -s 96 -n 32 "$f" 2>&1 ;;
+				*)      hexdump -C -n 128 "$f" 2>&1 ;;
+				esac
+			else
+				echo "not present"
+			fi
+			echo
+		done
+		echo "== i2c devices =="
+		ls -l /sys/bus/i2c/devices 2>&1
+	} > "$WORK/bosa.txt" 2>&1
+
+	# --- GPIO (RXSD / TX power) -------------------------------------
+	{
+		echo "== gpio chips =="
+		for chip in /sys/class/gpio/gpiochip*; do
+			echo "$chip label=$(cat "$chip/label" 2>/dev/null) base=$(cat "$chip/base" 2>/dev/null) ngpio=$(cat "$chip/ngpio" 2>/dev/null)"
+		done
+		echo; echo "== exported lines =="
+		for g in /sys/class/gpio/gpio[0-9]*; do
+			[ -d "$g" ] || continue
+			echo "$g value=$(cat "$g/value" 2>/dev/null)"
+		done
+	} > "$WORK/gpio.txt" 2>&1
+
+	# --- network ----------------------------------------------------
+	{
+		echo "== links =="; ip -s link 2>&1
+		echo; echo "== addr =="; ip addr 2>&1
+		echo; echo "== route =="; ip route 2>&1
+		echo; echo "== PP registers =="
+		cat /sys/bus/platform/devices/18000000.pp/zx_regs 2>&1
+		echo; echo "== PP rings =="
+		cat /sys/bus/platform/devices/18000000.pp/zx_desc 2>&1
+	} > "$WORK/net.txt" 2>&1
+
+	# --- counters / logs --------------------------------------------
+	logread 2>/dev/null | tail -n 500 > "$WORK/logread.txt"
+	{
+		echo "== dmesg (zx / pon / i2c) =="
+		dmesg 2>/dev/null | grep -iE 'zx|pon|i2c|bosa|sfp' 
+	} > "$WORK/dmesg-pon.txt" 2>&1
+
+	tar -czf "$OUT" -C /tmp pon-debug.d 2>/dev/null || {
+		echo '{"ok":false,"error":"tar failed"}'
+		return 1
+	}
+	rm -rf "$WORK"
+
+	printf '{"ok":true,"file":"%s","size":%s}\n' "$OUT" "$(wc -c < "$OUT" 2>/dev/null || echo 0)"
+}
+
+restart() {
+	# No PON protocol stack on this target: nothing to restart.  Report the
+	# truth instead of pretending, so the UI shows a real failure.
+	if [ -x /etc/init.d/pon ]; then
+		/etc/init.d/pon restart >/dev/null 2>&1 && {
+			echo '{"ok":true,"error":""}'
+			return 0
+		}
+	fi
+	echo '{"ok":false,"error":"no PON protocol stack on this target (ZX279131 port)"}'
+	return 1
+}
+
+case "${1:-}" in
+collect) collect ;;
+restart) restart ;;
+*)
+	echo "usage: airoha-pon-debug collect|restart" >&2
+	exit 2
+	;;
+esac

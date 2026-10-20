@@ -1,0 +1,236 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# pon-board-identity - read-only board / optical-module identity for
+# luci-app-pon on the ZTE ZX279131 (F7610U) port.
+#
+# Frontend contract (used by view/pon/hardware.js):
+#     list                     -> {"targets":{"<t>":{"fields":{"<f>":{"kind":"..."}}}}}
+#     read   <target> <field>  -> value on stdout
+#     write  <target> k=v ...  -> not supported here (exit 1)
+#
+# Everything reported comes from hardware we can actually read on this board:
+#   * the GPON BOSA on i2c0, SFF-8472 page A0 (vendor / part / serial)
+#   * the live DDM block decoded by ponctl (temperature / voltage / tx power)
+#   * the ZX279131 ethernet MAC
+# The stock firmware keeps the PON serial number and board MAC in flash
+# (reservearea); this kernel has no flash driver yet, so those are NOT
+# fabricated here - the fields simply are not offered.
+
+A0=/sys/bus/i2c/devices/0-0050/eeprom
+PONCTL=/usr/sbin/ponctl
+
+# SFF-8472 A0 strings are ASCII, space/NUL padded.  Print only printable chars.
+#
+# IMPORTANT: always read the whole 128-byte page and slice it here.  A short
+# read at an offset (hexdump -s 20 -n 16) comes back shifted by one byte on
+# this i2c controller, while the full-page read agrees with what ponctl sees.
+ao_ascii() {
+	hexdump -v -e '1/1 "%02x\n"' -s 0 -n 128 "$A0" 2>/dev/null |
+	awk -v off="$1" -v len="$2" '
+		NR > off && NR <= off + len {
+			n = 0
+			for (i = 1; i <= length($0); i++) {
+				c = tolower(substr($0, i, 1))
+				n = n * 16 + index("0123456789abcdef", c) - 1
+			}
+			if (n > 32 && n < 127) printf "%c", n
+		}'
+}
+
+# Pull one numeric field out of the ponctl JSON snapshot.
+pon_num() {
+	$PONCTL --device pon status --json 2>/dev/null |
+		tr -d ' \n' |
+		sed -n "s/.*\"$1\":\([-0-9.]*\).*/\1/p"
+}
+
+mac_of() {
+	cat "/sys/class/net/$1/address" 2>/dev/null
+}
+
+dt_string() {
+	tr -d '\000' < "/proc/device-tree/$1" 2>/dev/null
+}
+
+# First string of the root compatible property ("zte,zx279131-f7610u").
+soc_compatible() {
+	tr '\000' '\n' < /proc/device-tree/compatible 2>/dev/null | head -n 1
+}
+
+# Read one 32-bit register through the PP driver's peek node (it ioremaps for us;
+# /dev/mem returns EFAULT for these ranges).  The value lands in the kernel log.
+PPDIR=/sys/bus/platform/devices/18000000.pp
+peek32() {
+	[ -w "$PPDIR/zx_peek" ] || return 1
+	n=$(dmesg 2>/dev/null | wc -l)
+	echo "$1 1" > "$PPDIR/zx_peek" 2>/dev/null
+	v=$(dmesg 2>/dev/null | tail -n "+$((n + 1))" |
+		sed -n 's/.*peek 0x[0-9a-f]* = 0x\([0-9a-f]*\).*/\1/p' | head -n 1)
+	[ -n "$v" ] || return 1
+	# Normalise: "00000004" -> "4", "00000000" -> "0".
+	v=$(printf '%s' "$v" | sed 's/^0*//')
+	printf '%s\n' "${v:-0}"
+}
+
+# PON MAC work mode (0x17000018).  The vendor probe writes 3 for GPON;
+# 4 is the value the boot ROM leaves behind, which is *not* a PON mode.
+pon_status() {
+	wm=$(pon_field work_mode)
+	[ -n "$wm" ] || wm=$(peek32 0x17000018)
+
+	case "$wm" in
+	"")	echo "unreadable" ;;
+	0x3|3)	echo "0x3 (GPON)" ;;
+	0x4|4)	echo "0x4 (reset default, not initialised)" ;;
+	0x5|5)	echo "0x5 (XG-PON?)" ;;
+	0x6|6)	echo "0x6 (XGS-PON?)" ;;
+	*)	echo "0x$wm" ;;
+	esac
+}
+
+# SerDes state comes from the kernel driver's own read of 0x10e40068; the
+# dmesg-based peek path races with other printk traffic and returns wrong
+# values under load.
+PONSTAT=/sys/bus/platform/devices/18000000.pp/pon_status
+pon_field() {
+	[ -r "$PONSTAT" ] || return 1
+	sed -n "s/^$1=\([^ ]*\).*/\1/p" "$PONSTAT" | head -n 1
+}
+
+# 0x10e40068: bit4 = RX ready (vendor serdes_rx_ready), bit10 = PLL lock.
+serdes_word() {
+	v=$(pon_field status)
+	[ -n "$v" ] || return 1
+	# strip the 0x prefix and leading zeros for callers doing $((0x$v))
+	v=${v#0x}
+	v=$(printf '%s' "$v" | sed 's/^0*//')
+	printf '%s\n' "${v:-0}"
+}
+
+serdes_state() {
+	v=$(serdes_word)
+	if [ -z "$v" ]; then
+		echo "unreadable"
+	elif [ $((0x$v & 0x10)) -ne 0 ]; then
+		echo "RX ready"
+	else
+		echo "RX not ready"
+	fi
+}
+
+bit_state() {  # $1 = hex mask, $2 = set text, $3 = clear text
+	v=$(serdes_word)
+	if [ -z "$v" ]; then
+		echo "unreadable"
+	elif [ $((0x$v & $1)) -ne 0 ]; then
+		echo "$2"
+	else
+		echo "$3"
+	fi
+}
+
+# The PON MAC raises GIC SPI 0x25 (hwirq 69).  A non-zero count is the only
+# evidence that the MAC is actually delivering events; it stays at 0 until the
+# MAC has a TC service to report, which is why this is surfaced in the UI.
+PONIRQ=/sys/bus/platform/devices/18000000.pp/pon_irq
+irq_count() {
+	[ -r "$PONIRQ" ] || { echo "unavailable"; return; }
+	sed -n 's/^.*count=\([0-9]*\).*/\1/p' "$PONIRQ" | head -n 1
+}
+
+# Bytes 15 and 16 of the 48-byte downlink frame the MAC keeps in its PLOAM
+# window.  These two differ systematically between stock firmware in O5 and our
+# unregistered build, but they also cycle with the frame counter, so they are
+# reported raw - do NOT read them as a registration state until confirmed.
+olt_byte() {
+	v=$(pon_field "$1")
+	[ -n "$v" ] || { echo "unavailable"; return; }
+	echo "0x${v#0x}"
+}
+
+rxsd_state() {
+	# Once the PON front-end is initialised the RXSD pad feeds the SerDes
+	# block instead of GPIO47, so GPIO reads 0 while the link is fine.
+	# Trust the SerDes RX-ready flag first, fall back to the pad.
+	st=$(serdes_word)
+	if [ -n "$st" ] && [ $((0x$st & 0x10)) -ne 0 ]; then
+		echo "signal present"
+		return
+	fi
+
+	line=""
+	for chip in /sys/class/gpio/gpiochip*; do
+		[ -r "$chip/label" ] || continue
+		[ "$(cat "$chip/label" 2>/dev/null)" = "10d10080.gpio" ] || continue
+		line=$(( $(cat "$chip/base") + 15 ))
+		[ -d "/sys/class/gpio/gpio$line" ] || echo "$line" > /sys/class/gpio/export 2>/dev/null
+		break
+	done
+
+	v=""
+	[ -n "$line" ] && v=$(cat "/sys/class/gpio/gpio$line/value" 2>/dev/null)
+
+	case "$v" in
+	1)	echo "signal present" ;;
+	0)	echo "no signal" ;;
+	*)	echo "unavailable" ;;
+	esac
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] || { echo "usage: pon-board-identity list|read|write" >&2; exit 2; }
+
+case "$cmd" in
+list)
+	cat <<'EOF'
+{"targets":{
+ "module":{"fields":{"vendor":{"kind":"text"},"part_number":{"kind":"text"},
+   "serial":{"kind":"text"},"temperature":{"kind":"text"},
+   "voltage":{"kind":"text"},"tx_power":{"kind":"text"}}},
+ "board":{"fields":{"soc":{"kind":"text"},"model":{"kind":"text"},
+   "pon_mac":{"kind":"mac"},"lan_base_mac":{"kind":"mac"}}},
+ "pon":{"fields":{"rx_signal":{"kind":"text"},"work_mode":{"kind":"text"},
+   "serdes_reset":{"kind":"text"},"serdes_pll":{"kind":"text"},
+   "serdes_cdr":{"kind":"text"},"irq_count":{"kind":"text"},
+   "olt_state":{"kind":"text"},"olt_grant":{"kind":"text"}}}}}
+EOF
+	;;
+
+read)
+	target="${2:-}"; field="${3:-}"
+	case "$target.$field" in
+	module.vendor)      ao_ascii 20 16 ;;
+	module.part_number) ao_ascii 40 16 ;;
+	module.serial)      ao_ascii 68 16 ;;
+	module.temperature) pon_num temperature_celsius ;;
+	module.voltage)     pon_num voltage ;;
+	module.tx_power)    pon_num tx_power_dbm ;;
+	board.soc)          soc_compatible ;;
+	board.model)        dt_string "model" ;;
+	board.pon_mac)      mac_of eth0 ;;
+	board.lan_base_mac) mac_of br-lan ;;
+	pon.rx_signal)      rxsd_state ;;
+	pon.work_mode)      pon_status ;;
+	pon.serdes_reset)   serdes_state ;;
+	pon.serdes_pll)     bit_state 0x400 "locked" "not locked" ;;
+	pon.serdes_cdr)     printf '0x%s\n' "$(serdes_word)" ;;
+	pon.irq_count)      irq_count ;;
+	pon.olt_state)      olt_byte olt_reg ;;
+	pon.olt_grant)      olt_byte grant ;;
+	*)  echo "unknown field: $target.$field" >&2; exit 1 ;;
+	esac
+	;;
+
+write)
+	# Identity is read straight from the BOSA / SoC; nothing is stored, so
+	# there is nothing to write.  Be explicit rather than silently accepting.
+	echo "board identity is read-only on this target" >&2
+	exit 1
+	;;
+
+*)
+	echo "usage: pon-board-identity list|read|write" >&2
+	exit 2
+	;;
+esac

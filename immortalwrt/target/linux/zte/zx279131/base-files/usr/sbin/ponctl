@@ -1,0 +1,156 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# ponctl - PON line status for the ZTE ZX279131 / F7610U port.
+#
+# The 515xg luci-app-pon calls:
+#     ponctl --device <dev> status --json
+# and expects schema_version 1 plus a "line" object.  Everything else
+# (frontend / registration / datapath / counters) is optional.
+#
+# Hardware notes, all established by measurement on this board:
+#   * The GPON BOSA is an SFF-8472 device on i2c0: identity page A0 at 0x50,
+#     digital diagnostics A2 at 0x51.  Both are bound by the at24 driver.
+#   * A2 only serves the diagnostics block when a transfer *starts* at 0x60;
+#     a sequential read from 0x00 returns zeros for 0x60..0x7f.
+#   * A0 above 0x7f reads back as 0xff, so only the first 128 bytes matter.
+#   * "Optical signal" comes from GPIO47 (bank2 line 15), which the vendor
+#     BOB table calls RX_OP_SD.  This module leaves the A2 RX power field at
+#     zero even when RXSD is asserted, so GPIO47 is the reliable indicator.
+#
+# The PON MAC itself is not driven yet, so lifecycle stays "stopped" and the
+# registration block is a placeholder; the optical frontend is real data.
+
+CFG=/etc/config/pon
+CACHE=/tmp/pon-status.json
+A0=/sys/bus/i2c/devices/0-0050/eeprom
+A2=/sys/bus/i2c/devices/0-0051/eeprom
+GPIO=/sys/class/gpio
+RXSD_CHIP=10d10080.gpio
+RXSD_LINE=15
+
+device=""
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--device) device="$2"; shift 2 ;;
+	--json)   shift ;;
+	status)   shift ;;
+	*)        shift ;;
+	esac
+done
+
+# A daemon (or a future i2c poller) can drop a full snapshot here.
+if [ -s "$CACHE" ]; then
+	cat "$CACHE"
+	exit 0
+fi
+
+# mode comes from uci: config xpon '<name>' / option mode 'gpon'
+mode="gpon"
+if [ -f "$CFG" ]; then
+	m=$(uci -q get "pon.@xpon[0].mode")
+	[ -n "$m" ] && mode="$m"
+fi
+
+# BOSA receive signal detect
+rxsd=""
+for chip in "$GPIO"/gpiochip*; do
+	[ -r "$chip/label" ] || continue
+	[ "$(cat "$chip/label")" = "$RXSD_CHIP" ] || continue
+	line=$(( $(cat "$chip/base") + RXSD_LINE ))
+	[ -d "$GPIO/gpio$line" ] || echo "$line" > "$GPIO/export" 2>/dev/null
+	rxsd=$(cat "$GPIO/gpio$line/value" 2>/dev/null)
+	break
+done
+
+# Once the PON front-end is initialised the RXSD pad feeds the SerDes block
+# instead of GPIO47, so the pin reads 0 even with light present.  The kernel
+# driver's rx_ready flag (0x10e40068 bit4, the vendor's serdes_rx_ready) is
+# authoritative then; fall back to the pin before the SerDes is up.
+PONSTAT=/sys/bus/platform/devices/18000000.pp/pon_status
+serdes=""
+if [ -r "$PONSTAT" ]; then
+	st=$(sed -n 's/^status=0x\([0-9a-f]*\).*/\1/p' "$PONSTAT" 2>/dev/null | head -n 1)
+	[ -n "$st" ] && serdes=$(( (0x$st & 0x10) ? 1 : 0 ))
+fi
+
+TMP=/tmp/.pon-eeprom.$$
+: > "$TMP.a0"
+: > "$TMP.ddm"
+[ -r "$A0" ] && hexdump -v -e '1/1 "%02x\n"' -s 0 -n 128 "$A0" 2>/dev/null > "$TMP.a0"
+[ -r "$A2" ] && hexdump -v -e '1/1 "%02x\n"' -s 96 -n 32 "$A2" 2>/dev/null > "$TMP.ddm"
+
+awk -v dev="$device" -v cfgmode="$mode" -v rxsd="$rxsd" -v serdes="$serdes" '
+function h2d(s,   i, c, n) {
+	n = 0
+	for (i = 1; i <= length(s); i++) {
+		c = substr(s, i, 1)
+		n = n * 16 + index("0123456789abcdef", c) - 1
+	}
+	return n
+}
+function u16(a, i) { return a[i] * 256 + a[i + 1] }
+function s16(a, i) {
+	return (a[i] >= 128) ? (a[i] - 256) * 256 + a[i + 1] : a[i] * 256 + a[i + 1]
+}
+function ascii(a, i, n,   j, s) {
+	s = ""
+	for (j = i; j < i + n; j++)
+		if (a[j] > 32 && a[j] < 127) s = s sprintf("%c", a[j])
+	return s
+}
+# SFF-8472 reports power in units of 0.1 uW; the 16-bit value is uW * 10000.
+function dbm(raw) {
+	if (raw <= 0) return -40
+	return 10 * log(raw / 10000) / log(10)
+}
+function num(x) { return sprintf("%.2f", x) }
+
+FILENAME ~ /a0$/  { a0[FNR]  = h2d($1); na0 = FNR; next }
+FILENAME ~ /ddm$/ { ddm[FNR] = h2d($1); nddm = FNR; next }
+END {
+	have_a0  = (na0 >= 128)
+	have_ddm = (nddm >= 32)
+
+	rx   = have_ddm ? u16(ddm, 9) : 0
+	sig  = (serdes != "") ? serdes : ((rxsd == "1") ? 1 : (rxsd == "0") ? 0 : (rx > 0))
+
+	printf "{\"schema_version\":1,\n"
+	printf "\"line\":{\"lifecycle\":\"stopped\",\"optical_signal\":%s,\n", (sig ? "true" : "false")
+	printf "\"configured_mode\":\"%s\",\"active_mode\":\"\",\"mode_pending\":false,\n", cfgmode
+	printf "\"device\":\"%s\"},\n", dev
+
+	if (have_ddm) {
+		f = ""
+		f = f sprintf("\"tx_power_dbm\":%s,", num(dbm(u16(ddm, 7))))
+		# A2h bytes 102-103 hold TX power in 0.1 uW.  The value is only
+		# meaningful when read as a full page window from 0x60 (short
+		# reads on this i2c controller can shift by one byte).
+		if (rx > 0)
+			f = f sprintf("\"rx_power_dbm\":%s,", num(dbm(rx)))
+		else if (!sig)
+			f = f "\"rx_power_dbm\":-40.00,"
+		f = f sprintf("\"temperature_celsius\":%s,", num(s16(ddm, 1) / 256))
+		f = f sprintf("\"voltage\":%s,", sprintf("%.4f", u16(ddm, 3) / 10000))
+		f = f sprintf("\"tx_bias_ma\":%s,", num(u16(ddm, 5) * 0.002))
+		f = f sprintf("\"vendor\":\"%s\",", have_a0 ? ascii(a0, 21, 16) : "")
+		f = f sprintf("\"part_number\":\"%s\",", have_a0 ? ascii(a0, 41, 16) : "")
+		f = f sprintf("\"serial\":\"%s\",", have_a0 ? ascii(a0, 69, 16) : "")
+		# A2 byte 0x6E: bit7 = TX_FAULT, bit6 = TX_DISABLE (soft).
+		# The laser is gated when bit6 is set - bit7 is a fault flag and
+		# must not be mistaken for "transmitter off".
+		f = f sprintf("\"calibration\":\"ready\",\"tx_gate_enabled\":%s",
+			(int(ddm[15] / 64) % 2) ? "false" : "true")
+		printf "\"frontend\":{%s},\n", f
+	} else {
+		printf "\"frontend\":{\"error\":\"eeprom read failed\"},\n"
+	}
+
+	printf "\"registration\":{\"mpcp_state\":\"wait\",\"onu_state\":\"O1\"},\n"
+	printf "\"datapath\":{},\n"
+	printf "\"counters\":{}}\n"
+}
+' "$TMP.a0" "$TMP.ddm"
+
+rm -f "$TMP.a0" "$TMP.ddm"

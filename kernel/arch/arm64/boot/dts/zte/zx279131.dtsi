@@ -1,0 +1,260 @@
+// SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+/*
+ * ZTE ZX279131 (F7610U) SoC - minimal bring-up description.
+ *
+ * Verified against the running factory firmware (telnet) and U-Boot
+ * 2016.01-rc3 console log:
+ *   - GICv3 @ 0x500000 (platform device 500000.interrupt-controller)
+ *   - pl011 UART @ 0x10d0d000, SPI IRQ 12 (Linux virq 44)
+ *   - DDR 512 MiB @ 0x80000000 (U-Boot bdinfo)
+ *   - PSCI via SMC (U-Boot provides it; stock kernel uses it too)
+ *
+ * UART clocks are described as fixed 25 MHz clocks on purpose: the ZTE
+ * topcrm/lsp0 clock drivers are still ZX279133-only, and U-Boot leaves the
+ * UART clock running. "apb_pclk" is required unconditionally by the amba
+ * bus layer (drivers/amba/bus.c), so it is backed by the same fixed clock.
+ * Switch to the real clock chain once ported.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	compatible = "zte,zx279131";
+	#address-cells = <2>;
+	#size-cells = <2>;
+	interrupt-parent = <&gic>;
+
+	uart_25m: fixed-clock-uart-25m {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+		clock-output-names = "uartclk";
+	};
+
+	/*
+	 * Placeholder clocks for the SPI flash controller.  The real
+	 * topcrm/lsp0crpm clock tree is ZX279133-only; keep a fixed 25 MHz
+	 * until the clock drivers are ported.  "pclk" gates the register bus,
+	 * "wclk" drives the SPI shift engine.
+	 */
+	spifc_pclk: fixed-clock-spifc-pclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+		clock-output-names = "spifc_pclk";
+	};
+
+	spifc_wclk: fixed-clock-spifc-wclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+		clock-output-names = "spifc_wclk";
+	};
+
+	cpus {
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			compatible = "arm,cortex-a53";
+			device_type = "cpu";
+			reg = <0x0 0x0>;
+			enable-method = "psci";
+		};
+
+		cpu@1 {
+			compatible = "arm,cortex-a53";
+			device_type = "cpu";
+			reg = <0x0 0x1>;
+			enable-method = "psci";
+		};
+	};
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	gic: interrupt-controller@500000 {
+		compatible = "arm,gic-v3";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		#interrupt-cells = <3>;
+		interrupt-controller;
+		reg = <0x0 0x00500000 0x0 0x10000>,
+		      <0x0 0x00540000 0x0 0x80000>;
+		interrupts = <GIC_PPI 9 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(2) |
+				 IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(2) |
+				 IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(2) |
+				 IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(2) |
+				 IRQ_TYPE_LEVEL_LOW)>;
+	};
+
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		uart0: serial@10d0d000 {
+			compatible = "zte,zx279133-uart", "arm,pl011",
+				     "arm,primecell";
+			arm,primecell-periphid = <0x001feffe>;
+			reg = <0x0 0x10d0d000 0x0 0x1000>;
+			interrupts = <GIC_SPI 12 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&uart_25m>, <&uart_25m>;
+			clock-names = "uartclk", "apb_pclk";
+			status = "disabled";
+		};
+
+		/*
+		 * Packet-processing Ethernet engine (PP): DMA engine, BMU
+		 * buffer pool and 8 RX hardware queues.  Parameters verified
+		 * against the factory DTB and live register snapshots.
+		 */
+		pp: pp@18000000 {
+			compatible = "zte,zx279131-pp";
+			reg = <0x0 0x18000000 0x0 0x1000000>;
+			interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "pp";
+			status = "disabled";
+		};
+
+		/* Integrated GE switch (SMAC) + 4 built-in GPHYs. */
+		sw: sw@1a000000 {
+			compatible = "zte,zx279131-sw";
+			reg = <0x0 0x1a000000 0x0 0x1000000>;
+			interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "sw";
+			status = "disabled";
+		};
+
+		gephy: gephy@1a000000 {
+			compatible = "zte,zx279131-gephy";
+			interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 80 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "gphy0", "gphy1", "gphy2", "gphy3";
+			status = "disabled";
+		};
+
+		idm: idm@1a008000 {
+			compatible = "zte,ZX279131-idm";
+			reg = <0x0 0x1a008000 0x0 0x2000>;
+			interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "idm";
+			status = "disabled";
+		};
+
+		mdio: mdio@14f01000 {
+			compatible = "zte,zx279131-mdio";
+			reg = <0x0 0x14f01000 0x0 0x1000>;
+			status = "disabled";
+		};
+
+		/*
+		 * LSP0 CRPM register block.  Used (as a syscon) for the SPI
+		 * chip-select route; the ZX279131 clock/reset driver is a TODO.
+		 * The chip-select offset/mask start from the ZX279133 values.
+		 */
+		lsp0crpm: syscon@10d00000 {
+			compatible = "zte,zx279131-lsp0crpm", "syscon";
+			reg = <0x0 0x10d00000 0x0 0x1000>;
+		};
+
+		/*
+		 * SPI flash controller (SPI-NAND: HYF2GQ4U/GD5F2GQ4U family).
+		 * Programming model trialed against the ZX279133 driver; the
+		 * factory firmware describes it as "zte,ZX279131-spifc".
+		 */
+		spifc: spi@10d0f000 {
+			compatible = "zte,ZX279131-spifc";
+			reg = <0x0 0x10d0f000 0x0 0x40000>;
+			interrupts = <GIC_SPI 14 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&spifc_pclk>, <&spifc_wclk>;
+			clock-names = "pclk", "wclk";
+			zte,spi-chipselect = <&lsp0crpm 0x2c 0x20000000>;
+			spi-max-frequency = <25000000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+
+			flash@0 {
+				compatible = "spi-nand";
+				reg = <0>;
+				spi-max-frequency = <25000000>;
+				status = "okay";
+
+				partitions {
+					compatible = "fixed-partitions";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					partition@0 {
+						label = "bootrom";
+						reg = <0x0 0x20000>;
+						read-only;
+					};
+					partition@20000 {
+						label = "u-boot";
+						reg = <0x20000 0xe0000>;
+						read-only;
+					};
+					partition@100000 {
+						label = "others";
+						reg = <0x100000 0x80000>;
+					};
+					partition@180000 {
+						label = "parameter-tags";
+						reg = <0x180000 0x100000>;
+					};
+					partition@280000 {
+						label = "wlan";
+						reg = <0x280000 0x100000>;
+					};
+					partition@380000 {
+						label = "usercfg";
+						reg = <0x380000 0x200000>;
+					};
+					partition@580000 {
+						label = "middleware";
+						reg = <0x580000 0x100000>;
+					};
+					partition@680000 {
+						label = "kernel1";
+						reg = <0x680000 0x3000000>;
+					};
+					partition@3680000 {
+						label = "kernel2";
+						reg = <0x3680000 0x3000000>;
+					};
+					partition@6680000 {
+						label = "framework1";
+						reg = <0x6680000 0x1000000>;
+					};
+					partition@7680000 {
+						label = "framework2";
+						reg = <0x7680000 0x1000000>;
+					};
+					partition@8680000 {
+						label = "preplugin_data";
+						reg = <0x8680000 0x1800000>;
+					};
+					partition@9e80000 {
+						label = "plugin_data";
+						reg = <0x9e80000 0x6180000>;
+					};
+				};
+			};
+		};
+	};
+};

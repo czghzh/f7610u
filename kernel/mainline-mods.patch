@@ -1,0 +1,245 @@
+diff --git a/arch/arm64/boot/dts/zte/Makefile b/arch/arm64/boot/dts/zte/Makefile
+index ecc56901d..afb108c55 100644
+--- a/arch/arm64/boot/dts/zte/Makefile
++++ b/arch/arm64/boot/dts/zte/Makefile
+@@ -1,2 +1,3 @@
+ # SPDX-License-Identifier: GPL-2.0
+ dtb-y += zx279133-sr1010.dtb
++dtb-y += zx279131-f7610u.dtb
+diff --git a/drivers/i2c/busses/Kconfig b/drivers/i2c/busses/Kconfig
+index 4515ded43..de4a406e8 100644
+--- a/drivers/i2c/busses/Kconfig
++++ b/drivers/i2c/busses/Kconfig
+@@ -1596,4 +1596,15 @@ config I2C_VIRTIO
+           This driver can also be built as a module. If so, the module
+           will be called i2c-virtio.
+ 
++config I2C_ZX279133
++	tristate "ZTE ZX279131/ZX279133 I2C controller"
++	depends on OF && HAS_IOMEM
++	help
++	  Say yes here to enable the I2C master controller integrated in the
++	  ZTE ZX279131 / ZX279133 SoC.  On the F7610U ONU this controller is
++	  wired to the GPON optical module (SFF-8472 EEPROM at 0x50/0x51).
++
++	  This driver can also be built as a module. If so, the module will be
++	  called i2c-zx279133.
++
+ endmenu
+diff --git a/drivers/i2c/busses/Makefile b/drivers/i2c/busses/Makefile
+index fb985769f..8255b2982 100644
+--- a/drivers/i2c/busses/Makefile
++++ b/drivers/i2c/busses/Makefile
+@@ -163,3 +163,5 @@ obj-$(CONFIG_I2C_FSI)		+= i2c-fsi.o
+ obj-$(CONFIG_I2C_VIRTIO)	+= i2c-virtio.o
+ 
+ ccflags-$(CONFIG_I2C_DEBUG_BUS) := -DDEBUG
++
++obj-$(CONFIG_I2C_ZX279133)	+= i2c-zx279133.o
+diff --git a/drivers/mtd/nand/spi/Makefile b/drivers/mtd/nand/spi/Makefile
+index 6d3d203df..cf715e28f 100644
+--- a/drivers/mtd/nand/spi/Makefile
++++ b/drivers/mtd/nand/spi/Makefile
+@@ -1,5 +1,5 @@
+ # SPDX-License-Identifier: GPL-2.0
+ spinand-objs := core.o otp.o
+ spinand-objs += alliancememory.o ato.o esmt.o fmsh.o foresee.o gigadevice.o macronix.o
+-spinand-objs += micron.o paragon.o skyhigh.o toshiba.o winbond.o xtx.o
++spinand-objs += micron.o paragon.o skyhigh.o toshiba.o winbond.o xtx.o hyf.o
+ obj-$(CONFIG_MTD_SPI_NAND) += spinand.o
+diff --git a/drivers/mtd/nand/spi/alliancememory.c b/drivers/mtd/nand/spi/alliancememory.c
+index 9e97c4095..98a758bb6 100644
+--- a/drivers/mtd/nand/spi/alliancememory.c
++++ b/drivers/mtd/nand/spi/alliancememory.c
+@@ -32,6 +32,16 @@ static SPINAND_OP_VARIANTS(update_cache_variants,
+ 			   SPINAND_PROG_LOAD_1S_1S_4S_OP(false, 0, NULL, 0),
+ 			   SPINAND_PROG_LOAD_1S_1S_1S_OP(false, 0, NULL, 0));
+ 
++static SPINAND_OP_VARIANTS(am_read_cache_1s,
++		SPINAND_PAGE_READ_FROM_CACHE_FAST_1S_1S_1S_OP(0, 1, NULL, 0, 0),
++		SPINAND_PAGE_READ_FROM_CACHE_1S_1S_1S_OP(0, 1, NULL, 0, 0));
++
++static SPINAND_OP_VARIANTS(am_write_cache_1s,
++		SPINAND_PROG_LOAD_1S_1S_1S_OP(true, 0, NULL, 0));
++
++static SPINAND_OP_VARIANTS(am_update_cache_1s,
++		SPINAND_PROG_LOAD_1S_1S_1S_OP(false, 0, NULL, 0));
++
+ static int am_get_eccsize(struct mtd_info *mtd)
+ {
+ 	if (mtd->oobsize == 64)
+@@ -139,6 +149,22 @@ static const struct spinand_info alliancememory_spinand_table[] = {
+ 		     SPINAND_HAS_QE_BIT,
+ 		     SPINAND_ECCINFO(&am_ooblayout,
+ 				     am_ecc_get_status)),
++	/*
++	 * ZTE F7610U bring-up: the HeYangTek HYF2GQ4UAACAE SPI NAND
++	 * reports a repeating "c9 52 c9 52 ..." id stream; depending on
++	 * the controller's dummy-byte handling the observed window may
++	 * start at 0x52 and thus match this manufacturer id.  Register
++	 * the chip here as well so probe succeeds in that case too.
++	 */
++	SPINAND_INFO("HYF2GQ4UAACAE",
++		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xc9),
++		     NAND_MEMORG(1, 2048, 64, 64, 2048, 40, 1, 1, 1),
++		     NAND_ECCREQ(14, 512),
++		     SPINAND_INFO_OP_VARIANTS(&am_read_cache_1s,
++					      &am_write_cache_1s,
++					      &am_update_cache_1s),
++		     0,
++		     SPINAND_ECCINFO(&am_ooblayout, am_ecc_get_status)),
+ };
+ 
+ static const struct spinand_manufacturer_ops alliancememory_spinand_manuf_ops = {
+diff --git a/drivers/mtd/nand/spi/core.c b/drivers/mtd/nand/spi/core.c
+index 7266f0fbf..9352b2062 100644
+--- a/drivers/mtd/nand/spi/core.c
++++ b/drivers/mtd/nand/spi/core.c
+@@ -1283,6 +1283,7 @@ static const struct spinand_manufacturer *spinand_manufacturers[] = {
+ 	&toshiba_spinand_manufacturer,
+ 	&winbond_spinand_manufacturer,
+ 	&xtx_spinand_manufacturer,
++	&heyangtek_spinand_manufacturer,
+ };
+ 
+ static int spinand_manufacturer_match(struct spinand_device *spinand,
+@@ -1320,6 +1321,8 @@ static int spinand_id_detect(struct spinand_device *spinand)
+ 	ret = spinand_read_id_op(spinand, 0, 0, id);
+ 	if (ret)
+ 		return ret;
++	dev_info(&spinand->spimem->spi->dev, "spinand raw id [opcode]: %*phN\n",
++		 SPINAND_MAX_ID_LEN, id);
+ 	ret = spinand_manufacturer_match(spinand, SPINAND_READID_METHOD_OPCODE);
+ 	if (!ret)
+ 		return 0;
+@@ -1327,6 +1330,8 @@ static int spinand_id_detect(struct spinand_device *spinand)
+ 	ret = spinand_read_id_op(spinand, 1, 0, id);
+ 	if (ret)
+ 		return ret;
++	dev_info(&spinand->spimem->spi->dev, "spinand raw id [addr]: %*phN\n",
++		 SPINAND_MAX_ID_LEN, id);
+ 	ret = spinand_manufacturer_match(spinand,
+ 					 SPINAND_READID_METHOD_OPCODE_ADDR);
+ 	if (!ret)
+@@ -1335,6 +1340,8 @@ static int spinand_id_detect(struct spinand_device *spinand)
+ 	ret = spinand_read_id_op(spinand, 0, 1, id);
+ 	if (ret)
+ 		return ret;
++	dev_info(&spinand->spimem->spi->dev, "spinand raw id [dummy]: %*phN\n",
++		 SPINAND_MAX_ID_LEN, id);
+ 	ret = spinand_manufacturer_match(spinand,
+ 					 SPINAND_READID_METHOD_OPCODE_DUMMY);
+ 
+diff --git a/drivers/net/ethernet/zte/Kconfig b/drivers/net/ethernet/zte/Kconfig
+index 75769468e..7ec9578e5 100644
+--- a/drivers/net/ethernet/zte/Kconfig
++++ b/drivers/net/ethernet/zte/Kconfig
+@@ -49,4 +49,12 @@ config ZTE_ZX279133_RTL8372N
+ 	  physical ports 4 through 7, and CPU port 8. It registers four DSA
+ 	  user ports through the dedicated ZX279133 LAN conduit.
+ 
++config ZTE_ZX279131_ETH
++	tristate "ZTE ZX279131 PP Ethernet support"
++	depends on OF && HAS_IOMEM && HAS_DMA
++	help
++	  Enable support for the packet-processing Ethernet engine in the
++	  ZTE ZX279131 SoC (F7610U / zn515xg family).  Provides the PP DMA
++	  datapath, BMU buffer pool and an Ethernet netdev on the CPU port.
++
+ endif
+diff --git a/drivers/net/ethernet/zte/Makefile b/drivers/net/ethernet/zte/Makefile
+index 8fc08417f..c003bbdd2 100644
+--- a/drivers/net/ethernet/zte/Makefile
++++ b/drivers/net/ethernet/zte/Makefile
+@@ -7,3 +7,6 @@ zx279133-y := zx279133-main.o zx279133-tm.o zx279133-np.o zx279133-idm.o \
+ 
+ obj-$(CONFIG_ZTE_ZX279133_LAN_CONDUIT) += zx279133-lan-conduit.o
+ obj-$(CONFIG_ZTE_ZX279133_RTL8372N) += zx279133-rtl8372n.o
++
++obj-$(CONFIG_ZTE_ZX279131_ETH) += zx279131.o
++zx279131-y := zx279131-net.o zx279131-pon.o
+diff --git a/drivers/spi/spi-zx279133-sfc.c b/drivers/spi/spi-zx279133-sfc.c
+index 1217e5626..87dd04330 100644
+--- a/drivers/spi/spi-zx279133-sfc.c
++++ b/drivers/spi/spi-zx279133-sfc.c
+@@ -419,7 +419,11 @@ static int zx_sfc_probe(struct platform_device *pdev)
+ 		return dev_err_probe(dev, PTR_ERR(sfc->clk),
+ 				     "failed to enable clock\n");
+ 
+-	sfc->reset = devm_reset_control_get_exclusive(dev, NULL);
++	/*
++	 * The reset is optional: ZX279131 has no reset provider described
++	 * yet and the boot loader hands the controller over out of reset.
++	 */
++	sfc->reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+ 	if (IS_ERR(sfc->reset))
+ 		return dev_err_probe(dev, PTR_ERR(sfc->reset),
+ 				     "failed to get reset\n");
+@@ -434,13 +438,21 @@ static int zx_sfc_probe(struct platform_device *pdev)
+ 	if (!max_freq)
+ 		return dev_err_probe(dev, -EINVAL,
+ 				     "invalid spi-max-frequency\n");
++	/*
++	 * The clock may be a fixed-rate placeholder during bring-up on
++	 * ZX279131 (real clock tree not modeled yet).  Tolerate a refused
++	 * clk_set_rate and continue with whatever rate we got.
++	 */
+ 	ret = clk_set_rate(sfc->clk, max_freq);
+ 	if (ret)
+-		return dev_err_probe(dev, ret,
+-				     "failed to set clock to %u Hz\n", max_freq);
++		dev_warn(dev, "cannot set clock to %u Hz (%d); using %lu Hz\n",
++			 max_freq, ret, clk_get_rate(sfc->clk));
+ 	actual_rate = clk_get_rate(sfc->clk);
+-	if (!actual_rate || actual_rate > max_freq)
+-		return dev_err_probe(dev, actual_rate ? -ERANGE : -EINVAL,
++	if (!actual_rate)
++		return dev_err_probe(dev, -EINVAL,
++				     "invalid clock rate\n");
++	if (actual_rate > max_freq)
++		return dev_err_probe(dev, -ERANGE,
+ 				     "clock rate %lu exceeds requested %u Hz\n",
+ 				     actual_rate, max_freq);
+ 
+@@ -473,6 +485,8 @@ static int zx_sfc_probe(struct platform_device *pdev)
+ 
+ static const struct of_device_id zx_sfc_of_match[] = {
+ 	{ .compatible = "zte,zx279133-sfc" },
++	/* ZX279131 (F7610U) programming model, under bring-up. */
++	{ .compatible = "zte,ZX279131-spifc" },
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(of, zx_sfc_of_match);
+diff --git a/drivers/tty/serial/amba-pl011.c b/drivers/tty/serial/amba-pl011.c
+index f88c0ebfe..2463a996a 100644
+--- a/drivers/tty/serial/amba-pl011.c
++++ b/drivers/tty/serial/amba-pl011.c
+@@ -2961,9 +2961,15 @@ static int pl011_probe(struct amba_device *dev, const struct amba_id *id)
+ 	/*
+ 	 * ZX279133 supplies arm,primecell-periphid, bypassing
+ 	 * amba_read_periphid() and its shared-reset deassertion.
++	 *
++	 * ZX279131 (F7610U) has no reset provider in its DTS yet and the
++	 * bootloader hands the UART over out of reset, so acquire the reset
++	 * optionally: deassert it when one is described, skip silently
++	 * otherwise.
+ 	 */
+ 	if (vendor == &vendor_zte) {
+-		rst = devm_reset_control_get_shared_deasserted(&dev->dev, NULL);
++		rst = devm_reset_control_get_optional_shared_deasserted(&dev->dev,
++									NULL);
+ 		if (IS_ERR(rst))
+ 			return dev_err_probe(&dev->dev, PTR_ERR(rst),
+ 					     "failed to deassert reset\n");
+diff --git a/include/linux/mtd/spinand.h b/include/linux/mtd/spinand.h
+index 594fdaed5..1d4524e03 100644
+--- a/include/linux/mtd/spinand.h
++++ b/include/linux/mtd/spinand.h
+@@ -372,6 +372,7 @@ extern const struct spinand_manufacturer skyhigh_spinand_manufacturer;
+ extern const struct spinand_manufacturer toshiba_spinand_manufacturer;
+ extern const struct spinand_manufacturer winbond_spinand_manufacturer;
+ extern const struct spinand_manufacturer xtx_spinand_manufacturer;
++extern const struct spinand_manufacturer heyangtek_spinand_manufacturer;
+ 
+ /**
+  * struct spinand_op_variants - SPI NAND operation variants

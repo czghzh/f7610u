@@ -1,0 +1,62 @@
+{
+  "admin/network/pon": {
+    "title": "PON 光线路",
+    "order": 85,
+    "action": {
+      "type": "firstchild"
+    },
+    "depends": {
+      "acl": [
+        "luci-app-pon"
+      ],
+      "uci": {
+        "pon": true
+      }
+    }
+  },
+  "admin/network/pon/status": {
+    "title": "状态",
+    "order": 10,
+    "action": {
+      "type": "view",
+      "path": "pon/status"
+    }
+  },
+  "admin/network/pon/config": {
+    "title": "配置",
+    "order": 20,
+    "action": {
+      "type": "view",
+      "path": "pon/config"
+    }
+  },
+  "admin/network/pon/hardware": {
+    "title": "硬件信息",
+    "order": 30,
+    "action": {
+      "type": "view",
+      "path": "pon/hardware"
+    },
+    "depends": {
+      "acl": [
+        "luci-app-pon"
+      ],
+      "fs": {
+        "/usr/libexec/pon-board-identity": "executable"
+      }
+    }
+  },
+  "admin/network/pon/diagnostics": {
+    "title": "诊断",
+    "order": 40,
+    "action": {
+      "type": "view",
+      "path": "pon/diagnostics"
+    },
+    "depends": {
+      "fs": {
+        "/usr/libexec/airoha-pon-debug": "executable"
+      }
+    }
+  }
+}

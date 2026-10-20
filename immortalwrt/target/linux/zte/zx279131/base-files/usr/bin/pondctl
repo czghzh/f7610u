@@ -1,0 +1,86 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# pondctl - protocol-side (OMCI / OAM) status for the ZTE ZX279131 / F7610U port.
+#
+# luci-app-pon (from openwrt-pon-userspace) calls:
+#     pondctl status --line <line-section-name>
+# and treats the JSON document on stdout as the flat "values" object of the
+# OMCI / OAM status tab, i.e. keys such as channel_available, loid_configured,
+# authentication_meaning, backend_state, rx_messages, vlan_ids ...
+#
+# On this target there is no OMCI/OAM daemon and no GPON MAC driver yet, so
+# every protocol-side field is reported as "nothing happened": the channel is
+# down, nothing was authenticated, no GEM/Alloc-ID was assigned.  That is the
+# truthful answer and it makes the page render "off" instead of lying.
+#
+# The one thing this script does read from hardware is the optical side, so the
+# line block does not contradict ponctl (which owns the real frontend data).
+
+LINE="line0"
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--line) LINE="$2"; shift 2 ;;
+	status) shift ;;
+	*)      shift ;;
+	esac
+done
+
+. /lib/functions.sh 2>/dev/null
+
+# The line section points at its device node; fall back to the section name.
+DEV=$(uci -q get "pon.$LINE.device")
+[ -n "$DEV" ] || DEV="pon"
+
+# Find the omci/oam section bound to this line so loid state is not invented.
+OMCI_SEC=""
+OAM_SEC=""
+for s in $(uci -q show pon 2>/dev/null | sed -n "s/^pon\.\([^.=]*\)\.line='$LINE'\$/\1/p"); do
+	case "$s" in
+	omci*|*omci*) OMCI_SEC="$s" ;;
+	oam*|*oam*)   OAM_SEC="$s" ;;
+	esac
+done
+# uci names do not always carry the section type prefix; disambiguate by type.
+for s in $(uci -q show pon 2>/dev/null | sed -n "s/^pon\.\([^.=]*\)=\(omci\|oam\)\$/\1 \2/p" | tr ' ' ':'); do
+	name="${s%%:*}"; type="${s##*:}"
+	[ "$(uci -q get "pon.$name.line")" = "$LINE" ] || continue
+	[ "$type" = "omci" ] && OMCI_SEC="$name"
+	[ "$type" = "oam" ] && OAM_SEC="$name"
+done
+
+loid_configured=false
+profile=""
+if [ -n "$OMCI_SEC" ] && [ -n "$(uci -q get "pon.$OMCI_SEC.loid")" ]; then
+	loid_configured=true
+fi
+if [ -n "$OAM_SEC" ]; then
+	profile=$(uci -q get "pon.$OAM_SEC.operator")
+fi
+
+# Optical signal: ask ponctl, which owns GPIO47 (RX_OP_SD) and the SFF-8472
+# decoding.  Keep it best-effort - a missing ponctl must not break the tab.
+SIG=false
+SNAP=$(/usr/sbin/ponctl --device "$DEV" status --json 2>/dev/null)
+case "$SNAP" in
+*'"optical_signal":true'*)  SIG=true ;;
+*'"optical_signal":false'*) SIG=false ;;
+esac
+
+cat <<EOF
+{"line":{"optical_signal":$SIG},
+"channel_available":false,
+"loid_configured":$loid_configured,
+"authentication_meaning":"not-reported",
+"backend_state":"inactive",
+"rx_messages":0,
+"parse_errors":0,
+"vlan_ids":[],
+"multicast_vlan_ids":[],
+"igmp_upstream_vlan_ids":[],
+"igmp_upstream_tag_controls":[],
+"operator":"${profile:-ieee}",
+"ieee_discovery_completed":false,
+"ctc_discovery_state":"not-started"}
+EOF

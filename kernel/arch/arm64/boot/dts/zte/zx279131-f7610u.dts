@@ -1,0 +1,143 @@
+// SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+/*
+ * ZTE F7610U (ZX279131) board - minimal bring-up.
+ * Boots the mainline kernel from U-Boot via TFTP + bootm, serial console only.
+ */
+/dts-v1/;
+
+#include "zx279131.dtsi"
+
+/ {
+	model = "ZTE F7610U";
+	compatible = "zte,zx279131-f7610u", "zte,zx279131";
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x20000000>;
+	};
+
+	/*
+	 * D1: the bootloader leaves its live PP engine working set in the
+	 * low DDR - TXPOOL 0x80000000, RXPOOL 0x80400000, TBL0 0x80800000,
+	 * TBL1 0x80808000, RXRING 0x80A00000, ringA 0x80A10000 and ringB
+	 * 0x80A18000.  The kernel used to load at 0x80200000 and physically
+	 * overwrite that whole window.  Carve it out with no-map so the
+	 * engine state survives into Linux; the kernel now loads at
+	 * 0x8C000000 (see f7610u-bringup.its).
+	 */
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		pp_uboot: pp-uboot@80000000 {
+			reg = <0x0 0x80000000 0x0 0x00b00000>;
+			no-map;
+		};
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&spifc {
+	status = "okay";
+};
+
+/* Packet engine: bring up the PP DMA/BMU + CPU-port netdev */
+&pp {
+	status = "okay";
+};
+
+/*
+ * I2C controllers.  Register layout in the vendor 4.1.25 kernel was recovered
+ * by disassembling zx_i2c_read_data/zx_i2c_write_data/zx_i2c_init_ctr; the
+ * block is clocked and reset by the bootloader, so the driver only has to
+ * program the command/divider registers.
+ *
+ * i2c0 (0x14f03000) is the bus the GPON optical module sits on (SFF-8472
+ * EEPROM at 7-bit 0x50/0x51, also reachable as 8-bit 0xA0/0xA2, which is what
+ * the vendor "optical" module uses).
+ */
+&{/soc} {
+	i2c0: i2c@14f03000 {
+		compatible = "zte,zx-i2c";
+		reg = <0x0 0x14f03000 0x0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <100000>;
+		status = "okay";
+
+		/*
+		 * ZTE BOSA optical module: SFF-8472 A0 (identity) at 0x50 and
+		 * A2 (digital diagnostics) at 0x51.  Exposing them through the
+		 * at24 driver lets userspace read the DDM without poking the
+		 * i2c controller by hand.
+		 */
+		sfp_a0: eeprom@50 {
+			compatible = "atmel,24c02";
+			reg = <0x50>;
+			pagesize = <8>;
+		};
+
+		sfp_a2: eeprom@51 {
+			compatible = "atmel,24c02";
+			reg = <0x51>;
+			pagesize = <8>;
+		};
+	};
+
+	i2c1: i2c@14f04000 {
+		compatible = "zte,zx-i2c";
+		reg = <0x0 0x14f04000 0x0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <100000>;
+		status = "okay";
+	};
+
+	/*
+	 * PON front-end.  The vendor node lists seven register ranges and its
+	 * driver maps them with of_iomap() index 0..6; the order matters and is
+	 * mirrored here (sys_ctrl, top_crm, pin_mux, ncs_pll, serdes, mac, efuse).
+	 *
+	 * interrupts: GIC SPI 0x25, level high.  /proc/interrupts shows it as
+	 * hwirq 69 because the SPI numbers reported there are offset by 32.
+	 */
+	pon: pon@10e00000 {
+		compatible = "zte,zx279131-pon";
+		reg = <0x0 0x10e00000 0x0 0x10000>,
+		      <0x0 0x10e10000 0x0 0x10000>,
+		      <0x0 0x10e20000 0x0 0x10000>,
+		      <0x0 0x10e30000 0x0 0x10000>,
+		      <0x0 0x10e40000 0x0 0x10000>,
+		      <0x0 0x17000000 0x0 0x1000000>,
+		      <0x0 0x14f0d000 0x0 0x1000>;
+		interrupts = <0 0x25 4>;
+		status = "okay";
+	};
+
+	/*
+	 * GPIO bank 2 (0x10d10080..0x10d100bf).  Only this bank is described
+	 * because it holds the optical module signals - line 15 is GPIO47,
+	 * the BOSA RX signal detect (RX_OP_SD in the vendor GPIO table) which
+	 * luci-app-pon wants for "optical signal detected".
+	 */
+	gpio2: gpio@10d10080 {
+		compatible = "zte,zx279133-gpio";
+		reg = <0x0 0x10d10080 0x0 0x40>;
+		interrupts = <0 15 4>;
+		ngpios = <16>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
